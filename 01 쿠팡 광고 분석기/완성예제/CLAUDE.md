@@ -48,18 +48,21 @@
 - waste_cost_krw: 10000
 - star_roas_pct: 300
 - potential_roas_pct: 100
-- minimum_orders_for_star: 1
+- minimum_orders_for_star: 3
 - target_roas_pct: null
+- margin_pct: 40
 
 | 이름 | 뜻 |
 |---|---|
 | attribution_days | 전환 기준 · 광고를 누른 뒤 며칠 안의 주문까지 칠지 (14 또는 1) |
-| waste_cost_krw | 낭비 검토 · 광고비가 이 금액 이상인데 주문이 0건 |
-| star_roas_pct | 효자 · ROAS 가 이 % 이상이고 주문이 1건 이상 |
-| potential_roas_pct | 가능성 검토 · ROAS 가 이 % 이상, 효자 기준 미만 |
+| waste_cost_krw | 낭비 검토 · 광고비가 이 금액 이상인데 주문이 0건. 평균 CPA(주문 1건 받는 데 쓴 광고비)만큼 쓰고도 주문이 없으면 낭비로 본다. 샘플 1회차 키워드 평균 CPA가 약 8,800원이라 1만 원 |
+| star_roas_pct | 효자 · ROAS 가 이 % 이상이고 주문이 minimum_orders_for_star 건 이상 |
+| minimum_orders_for_star | 효자가 되려면 받아야 하는 최소 주문 수. 주문 1~2건은 우연일 수 있어 3건 |
+| potential_roas_pct | 가능성 검토 · 주문은 있는데 ROAS 가 이 % 미만 |
 | target_roas_pct | 목표 ROAS · null 이면 목표 달성을 판정하지 않는다 |
+| margin_pct | 마진율 (%) · 손익분기 ROAS = 100 ÷ 마진율 × 100. 40 이면 250%. ROAS 가 손익분기 이상이면 이익, 미만이면 손해. 지면 ROAS 가 손익분기 미만이면 지면 점검. null 이면 손익분기 판정을 하지 않는다 |
 
-숫자로 적는다. 「많이 쓰면」 이 아니라 「1만 원 이상이면」 이다.
+숫자로 적는다. 「많이 쓰면」 이 아니라 「1만 원 이상이면」 이다. 마진율을 모르면 40으로 둔다.
 
 ## 하지 않는 것
 

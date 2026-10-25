@@ -26,7 +26,7 @@ def apply_claude_md(root, config):
     if not p.exists():
         return config
     keys = ('attribution_days', 'waste_cost_krw', 'star_roas_pct', 'potential_roas_pct',
-            'minimum_orders_for_star', 'target_roas_pct')
+            'minimum_orders_for_star', 'target_roas_pct', 'margin_pct')
     out = dict(config)
     for m in _re.finditer(r'^\s*[-*]?\s*`?(' + '|'.join(keys) + r')`?\s*:\s*([^\s#|]+)', p.read_text(encoding='utf-8'), _re.M):
         k, v = m.group(1), m.group(2).strip('`')
@@ -90,6 +90,8 @@ assert days in (1, 14)
 assert CONFIG['star_roas_pct'] >= CONFIG['potential_roas_pct'] >= 0
 assert CONFIG['waste_cost_krw'] > 0 and CONFIG['minimum_orders_for_star'] >= 1
 assert CONFIG['target_roas_pct'] is None or CONFIG['target_roas_pct'] >= 0
+CONFIG.setdefault('margin_pct', None)
+assert CONFIG['margin_pct'] is None or 0 < CONFIG['margin_pct'] <= 100, '마진율(margin_pct)은 0보다 크고 100 이하이거나 null 이어야 합니다'
 before = hashlib.sha256(source.read_bytes()).hexdigest()
 if source.suffix.lower() == '.xlsx':
     wb = openpyxl.load_workbook(source, read_only=True, data_only=True)
@@ -161,9 +163,9 @@ title = html.escape(CONFIG['dashboard_title'])
 document = f'''<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{title}</title><link rel="stylesheet" href="styles.css"><script id="report-data" type="application/json">{payload}</script><script src="script.js" defer></script></head>
 <body><a class="skip" href="#main">분석 내용으로 이동</a>
-<header class="topbar"><div class="brand"><span class="brandmark" aria-hidden="true">C</span><div><strong>{title}</strong><span>COUPANG ADS · PERFORMANCE REPORT</span></div></div><div class="topmeta"><span class="dot"></span> 광고 성과 리포트 <span id="period" class="period"></span></div></header>
+<header class="topbar"><div class="brand"><span class="brandmark" aria-hidden="true">C</span><div><strong>{title}</strong><span>쿠팡 광고 · 성과 리포트</span></div></div><div class="topmeta"><span class="dot"></span> 광고 성과 리포트 <span id="period" class="period"></span></div></header>
 <div class="app"><nav class="navigation" aria-label="광고 분석 메뉴"><div role="tablist" id="tabs" aria-label="분석 메뉴"></div></nav>
-<main id="main" tabindex="-1"><div class="pageheading"><div><div class="eyebrow">CAMPAIGN INTELLIGENCE</div><h1 id="page-title">광고 성과를 한눈에</h1><p id="page-description"></p></div><div class="heading-controls"><label for="campaign">캠페인 범위</label><select id="campaign"><option value="">전체 캠페인</option></select></div></div>
+<main id="main" tabindex="-1"><div class="pageheading"><div><div class="eyebrow">캠페인 분석</div><h1 id="page-title">광고 성과를 한눈에</h1><p id="page-description"></p></div><div class="heading-controls"><label for="campaign">캠페인 범위</label><select id="campaign"><option value="">전체 캠페인</option></select></div></div>
 <div id="source-context" class="source-context"></div><div id="panel" role="tabpanel"></div>
 <footer><span id="footer-source"></span><span>광고 전환매출 기준 · 비율은 합계로 재계산</span></footer></main></div>
 <noscript>이 분석기는 JavaScript가 켜진 브라우저에서 열어 주세요.</noscript></body></html>'''
@@ -188,6 +190,8 @@ report = f'''# 생성 확인 · {out.name}
 - 원본 {len(original):,}행, {len(headers)}개 열 / 분석 {len(rows):,}행
 - 기간: {meta['start']}~{meta['end']} / 기간 밖 {outside}행 / 오류로 보류 {len(excluded)}행
 - 전환 기준: {days}일 / 목표 ROAS: {str(CONFIG['target_roas_pct'])+'%' if CONFIG['target_roas_pct'] is not None else '미설정'}
+- 마진율: {str(CONFIG['margin_pct'])+'% / 손익분기 ROAS '+format(10000/CONFIG['margin_pct'], '.1f')+'%' if CONFIG['margin_pct'] is not None else '미설정 (손익분기 판정 숨김)'}
+- 효자: ROAS {CONFIG['star_roas_pct']}% 이상 · 주문 {CONFIG['minimum_orders_for_star']}건 이상 / 낭비 검토: 광고비 {CONFIG['waste_cost_krw']:,}원 이상 · 주문 0건
 - 집계: 광고비 {totals['cost']:,.0f}원, 광고 전환매출 {totals['revenue']:,.0f}원, 주문 {totals['orders']:,.0f}건
 - 원본 수정 없음: 생성 전후 SHA-256 일치
 - 날짜·필수 열·유효 성과 값 확인 완료. 잘못된 행을 0으로 대체하지 않음.

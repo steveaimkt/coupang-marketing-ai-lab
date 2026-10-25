@@ -43,7 +43,7 @@ Step 5   수정 대응 (HTML · 노션 페이지 · 노션 다운로드 파일 3
 Step 6   메신저 요약                      ← 사람 승인 뒤
 ```
 
-**명령** (이 폴더에서)
+**명령** (이 폴더에서 · 설치 점검 도구가 `.venv` 를 만들었으면 `python3` 대신 `.venv/bin/python`)
 
 ```bash
 python3 -m pip install -r requirements.txt
@@ -51,7 +51,10 @@ python3 generate_report.py --data-dir "리포트 자료/노을뷰티/2026-10-20"
 python3 generate_report.py --data-dir "…" --brand "노을뷰티" --target-sales 20000000 --next-target-sales 22000000 --no-open
 python3 generate_report.py --data-dir "…" --brand "노을뷰티" --notion --no-open
 python3 messenger.py --dry-run
+python3 serve.py --latest      # 가장 최근 리포트를 http://localhost:{포트}/ 로 연다 · 끄기는 --stop
 ```
+
+리포트를 보여 줄 때는 file:// 이 아니라 `serve.py` 의 로컬 웹 주소를 쓰고, 화면에 그 주소를 적는다.
 
 ## 지표 계산법
 
@@ -69,11 +72,17 @@ python3 messenger.py --dry-run
 - 브랜드: 노을뷰티
 - 주문변화_기준_pct: 30
 - 매출편중_기준_pct: 70
+- ROAS_위험_기준_pct: 200
+- ROAS_양호_기준_pct: 300
+- 목표_ROAS_pct: 없음
 
 | 이름 | 뜻 |
 |---|---|
 | 주문변화_기준_pct | 상품별 광고 주문이 최근 7일과 그 앞 기간 사이에 이 % 이상 변하면 따로 뺀다 |
 | 매출편중_기준_pct | 한 상품이 매출의 이 % 를 넘으면 「매출 편중 위험」 경고. 넘지 않고 50% 만 넘으면 「주력 상품 매출 비중」 안내 |
+| ROAS_위험_기준_pct | ROAS(전체 매출 기준)가 이 % 미만이면 「적자 위험」 인사이트와 「광고 효율 · 높음」 개선안 |
+| ROAS_양호_기준_pct | ROAS 가 이 % 이상이면 「달성」 인사이트. 위험 기준과 이 기준 사이는 「보통 수준」 |
+| 목표_ROAS_pct | 다음 달 목표 ROAS. 「없음」 이면 양호 기준과 「지금 ROAS + 50」 중 큰 값을 쓴다 |
 
 숫자로 적는다. 「많이 변하면」 이 아니라 「30% 이상이면」 이다.
 

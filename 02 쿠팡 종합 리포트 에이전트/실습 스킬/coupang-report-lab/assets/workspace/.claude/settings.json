@@ -1,0 +1,57 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 generate_report.py:*)",
+      "Bash(python3 messenger.py:*)",
+      "Bash(.venv/bin/python messenger.py:*)",
+      "Bash(.venv/bin/python generate_report.py:*)",
+      "Bash(curl -s http://localhost:*)",
+      "Bash(.venv/bin/python serve.py:*)",
+      "Bash(python3 serve.py:*)",
+      "Bash(ls:*)",
+      "Bash(open 결과물/:*)",
+      "Bash(python3 .claude/skills/coupang-report-lab/scripts/check_setup.py:*)",
+      "Bash(python3 .claude/skills/coupang-report-lab/scripts/open_webhook_setup.py:*)",
+      "Read(./리포트 자료/**)",
+      "Read(./결과물/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard_force_html.py\"",
+            "timeout": 10,
+            "statusMessage": "사람이 손본 리포트 보호 확인 중"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard_exfil.py\"",
+            "timeout": 10,
+            "statusMessage": "내부 자료 유출 검사 중"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/remind_three_places.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

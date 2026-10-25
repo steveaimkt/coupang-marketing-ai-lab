@@ -7,7 +7,9 @@ description: 쿠팡 광고센터 매출 성장 광고 보고서(xlsx·csv)를 �
 
 ## 일하는 순서
 
-1. 작업 폴더의 `CLAUDE.md` 를 먼저 읽는다. 지표 계산법과 판단 기준(전환 기준 · 낭비 · 효자 · 목표 ROAS)이 여기 있고, 이 값이 앞선다.
+작업 폴더에 `.venv/` 가 있으면 아래 명령의 `python3` 대신 `.venv/bin/python` 을 쓴다.
+
+1. 작업 폴더의 `CLAUDE.md` 를 먼저 읽는다. 지표 계산법과 판단 기준(전환 기준 · 낭비 · 효자 · 목표 ROAS · 마진율)이 여기 있고, 이 값이 앞선다.
    그다음 같은 폴더의 [config.md](config.md)에서 읽는 자리, 제목, 탭 이름을 읽는다.
 2. `input_file` 규칙대로 `데이터/` 안 가장 최근 날짜 폴더의 매출 성장 광고 보고서 하나를 열어 폴더·파일 이름·시트·칸 이름·행 수·기간을 확인한다. 같은 폴더에 둘이면 멈추고 묻는다. 원본과 파일 이름은 고치지 않는다.
 3. 계산하기 전에 [reference.md](reference.md)를 읽는다. 칸 이름 맞추기, 합계로 비율 내기, 키워드 분류가 거기 있다. 없는 숫자나 비교 기간을 지어내지 않는다.
@@ -26,14 +28,28 @@ description: 쿠팡 광고센터 매출 성장 광고 보고서(xlsx·csv)를 �
    python3 .claude/skills/coupang-ad-dashboard/assets/dashboard/verify.py --config .claude/skills/coupang-ad-dashboard/config.md
    ```
 
-6. 결과 폴더(「결과물/2026-10-20_1405/ 에 만들었습니다」 꼴), 여는 방법, 적용한 기준, 광고비·전환매출·주문수·ROAS, 낭비 검토 건수를 알려 준다. 확인하지 못한 것은 확인하지 못했다고 적는다.
+6. 결과물은 파일로 열지 않고 로컬 웹으로 연다. 이미 떠 있으면 다시 띄우지 않고 주소만 연다.
+
+   ```
+   python3 .claude/skills/coupang-ad-dashboard/assets/dashboard/serve.py --workspace .
+   ```
+
+7. 결과 폴더(「결과물/2026-10-20_1405/ 에 만들었습니다」 꼴), 연 주소(「http://localhost:8765/2026-10-20_1405/ 에서 열었습니다」 꼴), 적용한 기준, 광고비·전환매출·주문수·ROAS, 손익분기 위·아래, 효자·낭비 검토 건수, 지면 점검 지면을 알려 준다. 확인하지 못한 것은 확인하지 못했다고 적는다.
 
 ## 말로 기준 바꾸기
 
 - 「낭비 기준 2만 원으로 바꿔줘」처럼 말하면 **CLAUDE.md 「판단 기준」 의 해당 줄만** 바꾸고 4번부터 다시 돈다. 스킬 파일은 고치지 않는다.
-- 낭비 기준은 `waste_cost_krw`, 효자 기준은 `star_roas_pct`, 목표 ROAS는 `target_roas_pct` 다. 하나를 바꾸라는 말에 다른 값을 같이 바꾸지 않는다.
+- 낭비 기준은 `waste_cost_krw`, 효자 기준은 `star_roas_pct` · `minimum_orders_for_star`, 목표 ROAS는 `target_roas_pct`, 마진율은 `margin_pct` 다. 하나를 바꾸라는 말에 다른 값을 같이 바꾸지 않는다.
 - 화면에서만 바꾸고 끝내지 않는다. CLAUDE.md 에 남겨야 다음에도 같은 기준으로 돈다.
 - 실제 쿠팡 광고 계정의 예산·입찰·키워드는 건드리지 않는다. 분석기는 제안만 한다.
+
+## 모양 고치기
+
+- 색 · 탭 순서 · 첫 화면 숫자는 이 스킬의 [config.md](config.md) 에서 고친다 (`primary_color` · `menu_items` · `kpi_order`).
+- 글꼴 · 표 칸 · 차트는 `assets/dashboard/styles.css` · `script.js` 에서 고친다.
+- 결과물 폴더의 파일은 고치지 않는다. 결과물 html 을 직접 고치면 다음에 다시 만들 때 사라진다.
+- 모양을 고칠 때 `build.py` 집계와 CLAUDE.md 판단 기준은 건드리지 않는다. 기준은 CLAUDE.md, 모양은 이 스킬이다.
+- 고친 뒤 4번부터 다시 돌아 새 결과물 폴더에 만들고, 5번으로 숫자가 그대로인지 맞춰 본다.
 
 ## 다음 주에 다시 쓸 때
 

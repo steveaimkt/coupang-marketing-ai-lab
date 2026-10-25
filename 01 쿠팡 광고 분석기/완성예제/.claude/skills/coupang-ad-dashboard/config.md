@@ -17,7 +17,8 @@ target_roas_pct: null
 star_roas_pct: 300
 potential_roas_pct: 100
 waste_cost_krw: 10000
-minimum_orders_for_star: 1
+minimum_orders_for_star: 3
+margin_pct: 40
 dashboard_title: 노을뷰티 쿠팡 광고 분석
 primary_color: '#2563EB'
 visual_style: 밝은 회색 배경, 흰 카드, 파랑과 인디고 포인트, 넉넉한 여백

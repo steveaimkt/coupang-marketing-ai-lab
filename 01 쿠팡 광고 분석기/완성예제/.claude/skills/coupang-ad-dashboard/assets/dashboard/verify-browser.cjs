@@ -53,12 +53,29 @@ const display = (k, v) => v == null ? '계산 불가' : ['roas','ctr','cvr'].inc
     const page = await browser.newPage({viewport:{width:1440,height:1000}});
     const errors=[];
     page.on('pageerror', e => errors.push(String(e)));
-    await page.goto(pathToFileURL(path.join(out, 'index.html')).href);
+    // 로컬 웹(serve.py)이 떠 있으면 같은 주소(http://localhost:{포트}/{폴더}/)로 연다. 없거나 안 열리면 파일로 연다.
+    let opened = false;
+    const serveState = path.join(path.dirname(resultsRoot()), '.serve.json');
+    if (fs.existsSync(serveState)) {
+      try {
+        const {port, root} = JSON.parse(fs.readFileSync(serveState, 'utf8'));
+        if (path.resolve(root) === path.dirname(out)) {
+          const res = await page.goto(`http://localhost:${port}/${encodeURIComponent(path.basename(out))}/`);
+          opened = !!res && res.ok();
+        }
+      } catch (e) { opened = false; }
+    }
+    if (!opened) await page.goto(pathToFileURL(path.join(out, 'index.html')).href);
     for (const k of C.kpi_order) assert.equal(await page.locator(`[data-kpi=${k}] strong`).innerText(), display(k, expected[k]), k);
     assert.deepEqual(await page.locator('[role=tab]').evaluateAll(bs=>bs.map(b=>b.textContent.replace(/^0\d/,''))), C.menu_items.map(m=>m.label));
     assert.deepEqual(await page.locator('[data-kpi]').evaluateAll(cs=>cs.map(c=>c.dataset.kpi)), C.kpi_order);
     assert.ok((await page.locator('#source-context').innerText()).includes(C.attribution_days+'일 전환 기준'));
     assert.ok((await page.locator('#source-context').innerText()).includes(C.target_roas_pct == null ? '목표 미설정' : '목표 ROAS '+C.target_roas_pct.toFixed(1)+'%'));
+    assert.ok((await page.locator('#source-context').innerText()).includes(C.margin_pct == null ? '마진율 미설정' : '마진율 '));
+    // 손익분기 칸은 마진율이 있으면 판정, 없으면 안내 한 줄
+    const beBox = await page.locator('#breakeven').innerText();
+    if (C.margin_pct == null) assert.ok(beBox.includes('마진율을 정하면 이익인지 손해인지 알려 드립니다'));
+    else assert.ok(/손익분기 (위|아래)/.test(beBox) || beBox.includes('계산 불가'));
     for (const m of C.menu_items) {
       await page.locator('#tab-'+m.id).click();
       assert.equal(await page.locator('#tab-'+m.id).getAttribute('aria-selected'), 'true');
@@ -83,7 +100,7 @@ const display = (k, v) => v == null ? '계산 불가' : ['roas','ctr','cvr'].inc
       for (let i=0;i<=Math.ceil(evidence.groups.keyword.length/20);i++) {
         const cells=await page.locator('#keyword-results tbody tr').evaluateAll(rs=>rs.map(r=>[...r.cells].map(c=>c.textContent)));
         count+=cells.length;
-        for(const row of cells) [3,4,6].forEach((col,j)=>sums[j]+=Number(row[col].replace(/[^\d.-]/g,'')));
+        const oc=C.margin_pct==null?6:7;for(const row of cells) [3,4,oc].forEach((col,j)=>sums[j]+=Number(row[col].replace(/[^\d.-]/g,'')));
         if(await page.locator('#next-page').isDisabled())break;
         await page.locator('#next-page').click();
       }
@@ -108,6 +125,26 @@ const display = (k, v) => v == null ? '계산 불가' : ['roas','ctr','cvr'].inc
         await page.locator('#keyword-search').fill(keyword.k);
         const matched=await page.locator('#keyword-results tbody tr:has(.namecell)').evaluateAll(rs=>rs.map(r=>[...r.cells].map(c=>c.textContent)));
         for(const row of matched) {assert.ok(row[0].includes(keyword.k));assert.equal(row[2],'효자');}
+      }
+      await page.locator('#keyword-search').fill('');
+      // 판정을 원본에서 다시 센 값(verify.py judgement)과 화면을 맞춘다
+      const J=evidence.judgement;
+      assert.ok(J,'검산.json 에 judgement 가 없습니다. verify.py 를 다시 돌리세요.');
+      const chip=async k=>Number((await page.locator(`[data-category="${k}"]`).innerText()).replace(/[^\d]/g,''));
+      assert.equal(await chip('효자'),J.star,'효자 수');
+      assert.equal(await chip('낭비검토'),J.waste,'낭비 검토 수');
+      const cpaText=await page.locator('#keyword-cpa').innerText();
+      assert.equal(cpaText,J.keyword_cpa==null?'계산 불가':n.format(J.keyword_cpa)+'원','키워드 평균 CPA');
+      await page.locator('#tab-overview').click();
+      const status=await page.locator('#breakeven').getAttribute('data-status');
+      assert.equal(status,J.breakeven_status==null?'none':J.breakeven_status,'손익분기 판정');
+      await page.locator('#tab-placement').click();
+      if(C.margin_pct==null){assert.equal(await page.locator('#placement-judgement').count(),0);}
+      else{
+        const marked=await page.locator('#placement-judgement tr[data-judge="지면 점검"]').evaluateAll(rs=>rs.map(r=>r.dataset.placement));
+        assert.deepEqual(marked,J.placement_check,'지면 점검 지면');
+        await page.locator('#tab-actions').click();
+        assert.equal(await page.locator('[data-action="placement-check"]').count(),J.placement_check.length,'실행 계획 지면 점검');
       }
     }
     if (['basic','full','layout','menu'].includes(scope)) {

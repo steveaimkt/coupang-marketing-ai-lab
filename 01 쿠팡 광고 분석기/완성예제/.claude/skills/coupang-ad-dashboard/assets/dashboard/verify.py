@@ -23,7 +23,7 @@ def apply_claude_md(root, config):
     if not p.exists():
         return config
     keys = ('attribution_days', 'waste_cost_krw', 'star_roas_pct', 'potential_roas_pct',
-            'minimum_orders_for_star', 'target_roas_pct')
+            'minimum_orders_for_star', 'target_roas_pct', 'margin_pct')
     out = dict(config)
     for m in _re.finditer(r'^\s*[-*]?\s*`?(' + '|'.join(keys) + r')`?\s*:\s*([^\s#|]+)', p.read_text(encoding='utf-8'), _re.M):
         k, v = m.group(1), m.group(2).strip('`')
@@ -75,6 +75,65 @@ def candidates(root, spec):
     return [m for m in sorted(root.glob(str(spec))) if not m.name.startswith(('~$', '.'))]
 
 
+def classify(r, config):
+    """script.js classify 와 같은 순서를 원본 합계(Decimal)로 다시 쓴다. 화면 코드를 가져오지 않는다."""
+    roas = r['revenue'] / r['cost'] * 100 if r['cost'] else None
+    if r['k'] in ('-', ''):
+        return '키워드 미지정'
+    if roas is not None and roas >= config['star_roas_pct'] and r['orders'] >= config['minimum_orders_for_star']:
+        return '효자'
+    if r['cost'] >= config['waste_cost_krw'] and r['orders'] == 0:
+        return '낭비 검토'
+    if r['orders'] > 0 and roas is not None and roas < config['potential_roas_pct']:
+        return '가능성 검토'
+    if r['orders'] > 0:
+        return '주문 발생'
+    if r['cost'] > 0 or r['clicks'] > 0:
+        return '관찰'
+    return '활동 없음'
+
+
+def judge(total, groups, config):
+    """손익분기 · 키워드 분류 · 지면 점검을 원본에서 다시 센다. 화면(verify-browser full)이 이 값과 맞아야 한다."""
+    margin = config.get('margin_pct')
+    breakeven = Decimal(10000) / Decimal(str(margin)) if margin else None
+    counts = {}
+    for r in groups['keyword']:
+        c = classify(r, config)
+        counts[c] = counts.get(c, 0) + 1
+    kw = [r for r in groups['keyword'] if r['k'] not in ('-', '')]
+    cost_kw = sum((r['cost'] for r in kw), Decimal(0))
+    orders_kw = sum((r['orders'] for r in kw), Decimal(0))
+    out = dict(counts=counts, star=counts.get('효자', 0), waste=counts.get('낭비 검토', 0),
+               keyword_cpa=cost_kw / orders_kw if orders_kw else None,
+               unassigned_cost=sum((r['cost'] for r in groups['keyword'] if r['k'] in ('-', '')), Decimal(0)),
+               margin_pct=margin, breakeven_roas_pct=breakeven)
+    if breakeven is None:
+        out.update(breakeven_status=None, profit=None, loss=None, placement_check=[], placement_check_cost=None)
+        return out
+    out['breakeven_status'] = None if total['roas'] is None else ('위' if total['roas'] >= breakeven else '아래')
+    roas_of = lambda r: r['revenue'] / r['cost'] * 100 if r['cost'] else None
+    out['profit'] = sum(1 for r in kw if roas_of(r) is not None and roas_of(r) >= breakeven)
+    out['loss'] = sum(1 for r in kw if roas_of(r) is not None and roas_of(r) < breakeven)
+    checks = sorted((r for r in groups['placement'] if roas_of(r) is not None and roas_of(r) < breakeven), key=lambda r: -r['cost'])
+    out['placement_check'] = [r['p'] for r in checks]
+    out['placement_check_cost'] = sum((r['cost'] for r in checks), Decimal(0))
+    return out
+
+
+def judgement_line(j):
+    parts = [f"효자 {j['star']}개", f"낭비 검토 {j['waste']}개"]
+    if j['keyword_cpa'] is not None:
+        parts.append(f"키워드 평균 CPA {j['keyword_cpa']:,.0f}원")
+    if j['breakeven_roas_pct'] is None:
+        parts.append('마진율 미설정 · 손익분기 판정 없음')
+    else:
+        parts.append(f"손익분기 ROAS {j['breakeven_roas_pct']:.1f}% · 전체 ROAS 손익분기 {j['breakeven_status']}")
+        parts.append(f"이익 키워드 {j['profit']}개 · 손해 키워드 {j['loss']}개")
+        parts.append(f"지면 점검 {len(j['placement_check'])}곳" + (f" ({', '.join(j['placement_check'])} · 광고비 {j['placement_check_cost']:,.0f}원)" if j['placement_check'] else ''))
+    return ' / '.join(parts)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--config', type=Path, required=True)
@@ -84,6 +143,7 @@ def main():
     config = yaml.safe_load(re.search(r'```yaml\n(.*?)```', config_path.read_text(), re.S)[1])
     root = config_path.parents[3]
     config = apply_claude_md(root, config)
+    config.setdefault('margin_pct', None)
     results = Path(config['output_directory'])
     results = results if results.is_absolute() else root / results
     if args.dir:
@@ -180,8 +240,9 @@ def main():
         for col in columns:
             assert sum(r[col] for r in groups[name]) == total[col]
     assert sha == hashlib.sha256(source.read_bytes()).hexdigest()
+    judgement = judge(total, groups, config)
     evidence = dict(total=total, groups=groups, sha256=sha, html_sha256=hashlib.sha256(html).hexdigest(),
-                    config=saved['config'], excluded_rows=excluded)
+                    config=saved['config'], excluded_rows=excluded, judgement=judgement)
     (out / '검산.json').write_text(json.dumps(evidence, ensure_ascii=False, default=lambda v: float(v) if isinstance(v, Decimal) else str(v)))
     with (out / '검증결과.md').open('a') as f:
         f.write('\n## 원본 독립 검산\n\n- 생성 코드의 파서·집계 함수를 가져오지 않고 원본을 다시 읽어 Decimal로 검산.\n'
@@ -189,9 +250,10 @@ def main():
                 f'- 원본 SHA-256: {sha}\n- HTML SHA-256: {evidence["html_sha256"]}\n'
                 f'- 유효 {len(rows)}행의 필드·합계 일치. 보류 {len(excluded)}행, 기간 밖 {outside}행 대조 일치.\n'
                 '- 일별·캠페인·지면·키워드 합계와 원본 행 번호: 검산.json 참조.\n'
+                f'- 판정 다시 세기 (전체 캠페인): {judgement_line(judgement)}\n'
                 '- 브라우저 표시·상호작용: 이 검사만으로는 미확인.\n')
     shown = out.relative_to(root) if out.is_relative_to(root) else out
-    print(json.dumps({'matched': True, 'dir': str(shown), 'rows': len(rows), 'total': total}, ensure_ascii=False, default=str))
+    print(json.dumps({'matched': True, 'dir': str(shown), 'rows': len(rows), 'total': total, 'judgement': judgement}, ensure_ascii=False, default=str))
 
 
 if __name__ == '__main__':
