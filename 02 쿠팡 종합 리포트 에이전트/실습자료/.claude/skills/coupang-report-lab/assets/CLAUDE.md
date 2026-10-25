@@ -20,6 +20,17 @@
 
 경로를 따로 말하지 않으면 `리포트 자료/{{BRAND}}/` 안에서 **이름이 가장 뒤인 날짜 폴더**를 쓴다.
 
+**결과물 쌓이는 자리**
+
+```
+결과물/{자료 날짜}_{만든 시각 HHMM}/   리포트를 만들 때마다 새 폴더 (같은 이름이 있으면 _2, _3)
+  ├── {{BRAND}}_광고리포트_2026-10-20.html   리포트
+  ├── 검토결과.md                            리포트검토 서브에이전트의 결과
+  └── 메신저요약.txt                          messenger.py --dry-run 으로 본 요약
+```
+
+따로 말하지 않으면 노션 발행 · 검토 · 수정 대응 · 메신저 요약은 **가장 최근 결과물 폴더**(`결과물/` 안 이름순 마지막)의 리포트를 쓴다.
+
 **일하는 순서** · 「광고 리포트 작성하자」 → `coupang-report` 스킬
 
 ```
@@ -36,10 +47,10 @@ Step 6   메신저 요약                      ← 사람 승인 뒤
 
 ```bash
 python3 -m pip install -r requirements.txt
-python3 generate_report.py --data-dir "리포트 자료/{{BRAND}}/2026-10-20" --brand "{{BRAND}}" --no-open
-python3 generate_report.py --data-dir "…" --brand "{{BRAND}}" --target-sales 20000000 --next-target-sales 22000000 --force-html
+python3 generate_report.py --data-dir "리포트 자료/{{BRAND}}/2026-10-20" --brand "{{BRAND}}" --summary-only
+python3 generate_report.py --data-dir "…" --brand "{{BRAND}}" --target-sales 20000000 --next-target-sales 22000000 --no-open
 python3 generate_report.py --data-dir "…" --brand "{{BRAND}}" --notion --no-open
-python3 messenger.py --data-dir "…" --dry-run
+python3 messenger.py --dry-run
 ```
 
 ## 지표 계산법
@@ -72,6 +83,7 @@ python3 messenger.py --data-dir "…" --dry-run
 - **검토를 통과하지 못한 리포트는 배포하지 않는다**
 - **원본 엑셀과 파일 이름을 고치지 않는다.** 읽기만 한다
 - **키를 파일이나 화면에 적지 않는다.** 노션 키와 웹훅 주소는 `.env` 에만 둔다
-- **리포트 자료 · output · .env 를 밖으로 올리지 않는다** (`guard_exfil` 훅이 멈춘다)
-- **사람이 손본 리포트를 덮어쓰지 않는다** (`guard_force_html` 훅이 멈춘다)
+- **리포트 자료 · 결과물 · .env 를 밖으로 올리지 않는다** (`guard_exfil` 훅이 멈춘다)
+- **이미 있는 리포트를 덮어쓰지 않는다.** 새로 만들면 새 결과물 폴더에 들어간다. 고칠 때는 그 폴더의 HTML 을 Edit 로 그 자리에서 고친다
+- **사람이 손본 리포트를 새 자동 리포트로 바꿔 올리지 않는다** (`guard_force_html` 훅이 멈춘다)
 - 자료에 없는 숫자를 지어내지 않는다. 추정은 추정이라고 적는다

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PostToolUse(Edit|Write): output/*.html 을 고쳤으면 나머지 2곳도 고치라고 알린다.
+"""PostToolUse(Edit|Write): 결과물/*/*.html 을 고쳤으면 나머지 2곳도 고치라고 알린다.
 
 CLAUDE.md / SKILL.md 의 "수정 시 3곳 동시" 규칙:
   ① 로컬 HTML  ② Notion 페이지 블록  ③ Notion 다운로드 첨부 파일
@@ -25,7 +25,7 @@ def main():
         sys.exit(0)
 
     p = Path(path)
-    if p.suffix.lower() != ".html" or "output" not in p.parts:
+    if p.suffix.lower() != ".html" or not ({"결과물", "output"} & set(p.parts)):
         sys.exit(0)
 
     print(json.dumps({

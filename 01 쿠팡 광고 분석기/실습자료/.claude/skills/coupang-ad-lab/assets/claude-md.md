@@ -16,6 +16,16 @@
 
 분석은 `데이터/` 안에서 **이름이 가장 뒤인 날짜 폴더**의 매출 성장 광고 보고서 하나를 읽는다.
 
+**결과물 쌓이는 자리**
+
+```
+결과물/{자료 날짜}_{만든 시각}/   예 결과물/2026-10-20_1405/
+  └── index.html · styles.css · script.js · 검증결과.md
+```
+
+만들 때마다 새 폴더에 넣고 지난 폴더는 덮어쓰지 않는다. 같은 이름이 있으면 `_2`, `_3` 을 붙인다.
+가장 최근 결과물은 `결과물/` 안 **이름순 마지막 폴더**다. 맞춰 보기와 링크 나누기는 따로 말이 없으면 이 폴더를 쓴다.
+
 **일하는 순서** · 「쿠팡 광고 분석해줘」 → `coupang-ad-dashboard` 스킬
 
 ```
@@ -36,8 +46,8 @@
 
 - attribution_days: {{DAYS}}
 - waste_cost_krw: {{WASTE}}
-- star_roas_pct: 300
-- potential_roas_pct: 100
+- star_roas_pct: {{STAR}}
+- potential_roas_pct: {{POTENTIAL}}
 - minimum_orders_for_star: 1
 - target_roas_pct: {{TARGET}}
 

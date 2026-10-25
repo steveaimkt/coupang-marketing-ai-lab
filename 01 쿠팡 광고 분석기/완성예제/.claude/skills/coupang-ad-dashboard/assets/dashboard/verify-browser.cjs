@@ -1,4 +1,5 @@
-// 실행: node verify-browser.cjs <출력폴더> <basic|full|settings|menu|layout>
+// 실행: node verify-browser.cjs [결과물 폴더] [basic|full|settings|menu|layout]
+// 폴더를 비우면 가장 최근 결과물(결과물/ 안 폴더 이름순 마지막)을 연다. 결과물/ 을 주어도 그 안의 마지막 폴더를 연다.
 // 이미 설치된 Playwright 사용. 별도 위치는 PLAYWRIGHT_MODULE, CHROMIUM_EXECUTABLE로 지정.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -6,9 +7,31 @@ const assert = require('node:assert/strict');
 const {createHash} = require('node:crypto');
 const {pathToFileURL} = require('node:url');
 const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const out = path.resolve(process.argv[2]);
-const scope = process.argv[3] || 'basic';
-assert.ok(['basic', 'full', 'settings', 'menu', 'layout'].includes(scope));
+const SCOPES = ['basic', 'full', 'settings', 'menu', 'layout'];
+const RESULT_NAME = /^(\d{4}-\d{2}-\d{2}_\d{4})(?:_(\d+))?$/;
+function latestResult(base) {
+  const names = fs.existsSync(base) ? fs.readdirSync(base).filter(n => RESULT_NAME.test(n) && fs.statSync(path.join(base, n)).isDirectory()) : [];
+  assert.ok(names.length, `결과물이 아직 없습니다: ${base}`);
+  const key = n => { const m = n.match(RESULT_NAME); return [m[1], Number(m[2] || 1)]; };
+  names.sort((x, y) => { const a = key(x), b = key(y); return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1]; });
+  return path.join(base, names[names.length - 1]);
+}
+function resultsRoot() {
+  // 작업 폴더 = .claude 가 있는 가장 가까운 위 폴더. 없으면 지금 폴더. output_directory 는 분석 스킬 config.md 에서 읽는다.
+  let dir = __dirname;
+  while (dir !== path.dirname(dir) && !fs.existsSync(path.join(dir, '.claude', 'skills'))) dir = path.dirname(dir);
+  const root = fs.existsSync(path.join(dir, '.claude', 'skills')) ? dir : process.cwd();
+  const cfg = path.join(root, '.claude/skills/coupang-ad-dashboard/config.md');
+  const m = fs.existsSync(cfg) && fs.readFileSync(cfg, 'utf8').match(/^output_directory:\s*['"]?([^'"\n]+?)['"]?\s*$/m);
+  const rel = m ? m[1] : '결과물';
+  return path.isAbsolute(rel) ? rel : path.join(root, rel);
+}
+let [given, scopeArg] = process.argv.slice(2);
+if (SCOPES.includes(given) && scopeArg === undefined) [given, scopeArg] = [undefined, given];
+let out = given ? path.resolve(given) : latestResult(resultsRoot());
+if (!fs.existsSync(path.join(out, 'index.html'))) out = latestResult(out);
+const scope = scopeArg || 'basic';
+assert.ok(SCOPES.includes(scope));
 const html = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
 const hash = createHash('sha256').update(html).digest('hex');
 const {config: C, rows} = JSON.parse(html.match(/<script id="report-data" type="application\/json">(.*?)<\/script>/s)[1]);
@@ -97,7 +120,7 @@ const display = (k, v) => v == null ? '계산 불가' : ['roas','ctr','cvr'].inc
       }
     }
     assert.deepEqual(errors,[]);
-    const result={scope,passed:true,html_sha256:hash,seconds:(performance.now()-start)/1000};
+    const result={scope,passed:true,dir:path.basename(out),html_sha256:hash,seconds:(performance.now()-start)/1000};
     fs.appendFileSync(path.join(out,'검증결과.md'),`\n## 브라우저 확인: ${scope}\n\n- HTML SHA-256: ${hash}\n- 실행 범위 통과, JavaScript 실행 오류 없음.\n- 전체 검색·필터·정렬·집계 확인: ${scope==='full'?'수행':'이번 범위에서는 미수행'}\n`);
     console.log(JSON.stringify(result));
   } finally {await browser.close();}

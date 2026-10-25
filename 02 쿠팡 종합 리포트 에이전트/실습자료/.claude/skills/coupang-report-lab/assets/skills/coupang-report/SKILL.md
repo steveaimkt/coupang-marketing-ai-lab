@@ -16,11 +16,19 @@ description: "쿠팡 광고 리포트 6단계 워크플로우. 데이터 분석 
 - `{date_display}`: date_code를 아래 규칙으로 변환 (예: `2026-10-20` → `2026-10-20`)
 - `{report_title}`: `{brand} 광고 리포트 {date_display}` (예: `노을뷰티 광고 리포트 2026-10-20`)
 - `{html_filename}`: `{brand}_광고리포트_{date_display}.html` (예: `노을뷰티_광고리포트_2026-10-20.html`)
+- `{result_dir}`: Step 3 에서 생긴 결과물 폴더 (예: `결과물/2026-10-20_1405`). 생성기가 끝에 `폴더:` 로 알려 준다
+
+### 결과물 자리
+
+리포트를 만들 때마다 `결과물/{date_code}_{만든 시각 HHMM}/` 새 폴더에 들어간다. 같은 이름이 있으면 `_2`, `_3` 이 붙는다.
+**이미 있는 리포트는 덮어쓰지 않는다.** 검토 결과와 메신저 요약도 같은 폴더에 둔다.
+
+따로 지정이 없으면 노션 발행 · 검토 · 수정 대응 · 메신저 요약은 **가장 최근 결과물 폴더**(`결과물/` 안 이름순 마지막)의 리포트를 쓴다.
 
 ### date_code 파싱 규칙
 
 `generate_report.py`의 파일명 생성 로직과 **반드시 동일**해야 한다.
-어긋나면 Step 4의 HTML 보호 모드가 다른 파일을 찾아 수동 섹션이 유실된다.
+어긋나면 Step 4 가 가장 최근 결과물에서 이 리포트를 못 찾아, 수동 섹션이 없는 새 리포트를 올린다.
 
 | date_code | 처리 | 예시 |
 |-----------|------|------|
@@ -34,7 +42,7 @@ description: "쿠팡 광고 리포트 6단계 워크플로우. 데이터 분석 
 
 ---
 
-## Step 1. 데이터 분석 & 1차 리포트
+## Step 1. 데이터 분석 & 1차 확인
 
 1. 데이터 폴더의 파일 목록을 확인합니다:
    ```bash
@@ -45,14 +53,14 @@ description: "쿠팡 광고 리포트 6단계 워크플로우. 데이터 분석 
    - `*DAILY*SUMMARY*METRICS*.xlsx` (일별 판매)
    - `*VENDOR*ITEM*METRICS*.xlsx` (제품별 판매)
 
-2. 1차 HTML 리포트를 생성합니다:
+2. 숫자만 먼저 확인합니다. 이 단계에서는 파일을 만들지 않습니다 (리포트는 Step 3 에서 한 번 만든다):
    ```bash
-   python3 generate_report.py --data-dir "{data_path}" --report-title "{report_title}" --brand "{brand}" --no-open
+   python3 generate_report.py --data-dir "{data_path}" --report-title "{report_title}" --brand "{brand}" --summary-only
    ```
 
 ### 결과 확인
 
-1차 리포트 생성 후 핵심 수치를 사용자에게 요약 표시합니다:
+1차 분석 후 핵심 수치를 사용자에게 요약 표시합니다:
 
 ```
 --- Step 1/6 완료: 데이터 분석 ---
@@ -97,15 +105,16 @@ description: "쿠팡 광고 리포트 6단계 워크플로우. 데이터 분석 
 
 ### 실행
 
-1. 목표 매출이 있으면 `--target-sales`(당월) + `--next-target-sales`(다음달) 포함하여 재생성합니다:
+1. 리포트를 만듭니다. 목표 매출이 있으면 `--target-sales`(당월) + `--next-target-sales`(다음달) 를 넣습니다:
    ```bash
-   python3 generate_report.py --data-dir "{data_path}" --report-title "{report_title}" --brand "{brand}" --target-sales {목표매출} --next-target-sales {다음달목표} --force-html
+   python3 generate_report.py --data-dir "{data_path}" --report-title "{report_title}" --brand "{brand}" --target-sales {목표매출} --next-target-sales {다음달목표} --no-open
    ```
+   > 새 결과물 폴더 `{result_dir}` 가 생기고 그 안에 `{html_filename}` 이 들어갑니다. 끝에 나오는 `폴더:` 줄을 `{result_dir}` 로 기억합니다.
    > ⚠️ Step 2에서 받은 **다음달 목표를 반드시 `--next-target-sales`로 전달**한다. 빠뜨리면 자동 "다음월 목표" 섹션이 룰 기반 추정치를 써서 수동 섹션의 다음달 목표와 숫자가 어긋난다. (다음달 목표 "없음"이면 플래그 생략)
    >
-   > ⚠️ `--brand`는 Step 1·4와 **동일하게** 전달한다. 생략해도 경로에서 추출되지만, 값이 갈리면 다른 파일명이 생성되어 Step 4의 HTML 보호가 무력화된다.
+   > ⚠️ `--brand`는 Step 1·4와 **동일하게** 전달한다. 생략해도 경로에서 추출되지만, 값이 갈리면 다른 파일명이 생성되어 Step 4 가 손본 리포트를 못 찾는다.
 
-2. 생성된 HTML 파일에 아래 수동 섹션을 직접 추가합니다 (개선사항 섹션 앞에 삽입):
+2. `{result_dir}/{html_filename}` 에 아래 수동 섹션을 Edit 로 직접 추가합니다 (개선사항 섹션 앞에 삽입):
 
    **[목표 매출 달성 분석]**, `--target-sales`로 자동 생성되므로 수치 확인만
    - 이번달 목표 기준으로 달성률, 잔여 필요 매출, 목표 일매출, 권장 광고비 정확한지 확인
@@ -122,7 +131,7 @@ description: "쿠팡 광고 리포트 6단계 워크플로우. 데이터 분석 
 
 3. 브라우저에서 HTML을 열어 사용자에게 보여줍니다:
    ```bash
-   open "output/{html_filename}"
+   open "{result_dir}/{html_filename}"
    ```
 
 ### 사용자 확인
@@ -134,14 +143,14 @@ description: "쿠팡 광고 리포트 6단계 워크플로우. 데이터 분석 
 
 ### ⚠️ 중요: 수동 섹션 보호
 
-이 단계 이후로는 `generate_report.py`를 `--force-html` 없이 실행해야 합니다.
-`--notion`만 실행할 때는 기존 HTML을 덮어쓰지 않습니다.
-수동 추가한 마케팅 플랜 등의 섹션이 날아가지 않도록 보호됩니다.
+생성기는 이미 있는 리포트를 덮어쓰지 않습니다. 다시 돌리면 새 결과물 폴더가 생길 뿐입니다.
+`--notion` 만 실행하면 새로 만들지 않고 **가장 최근 결과물 폴더의 리포트**(수동 섹션이 든 것)를 그대로 올립니다.
+리포트를 고칠 때는 그 폴더의 HTML 을 Edit 로 그 자리에서 고칩니다. Write 로 통째로 다시 쓰지 않습니다.
 
 > 🛡️ `.claude/hooks/guard_force_html.py` 훅이 이를 강제합니다.
-> 대상 HTML에 수동 섹션 마커(`마케팅 플랜`·`제품별 매출 목표`·`핵심 실행 플랜`·`다음달 목표`)가
-> 있는 상태에서 `--force-html`을 실행하면 **명령이 차단**됩니다.
-> 차단되면 임의로 우회하지 말고, 사용자에게 "수동 섹션이 초기화되는데 진행할까요?"를 먼저 확인하세요.
+> 가장 최근 리포트에 수동 섹션 마커(`마케팅 플랜`·`제품별 매출 목표`·`핵심 실행 플랜`·`다음달 목표`)가
+> 있는 상태에서 `--notion --force-html` 로 새 리포트를 올리려 하거나, 그 HTML 을 Write 로 다시 쓰려 하면 **차단**됩니다.
+> 차단되면 임의로 우회하지 말고, 사용자에게 "손본 섹션이 노션에서 빠지는데 진행할까요?"를 먼저 확인하세요.
 
 ---
 
@@ -152,10 +161,11 @@ description: "쿠팡 광고 리포트 6단계 워크플로우. 데이터 분석 
 
 ```
 Agent(subagent_type="리포트검토",
-      prompt="데이터 폴더: {data_path} · 리포트 HTML: output/{html_filename}")
+      prompt="데이터 폴더: {data_path} · 리포트 HTML: {result_dir}/{html_filename}")
 ```
 
 검토 서브에이전트는 **읽기 전용**입니다. 발견 목록만 돌려주고 파일은 건드리지 않습니다.
+돌려받은 검토 결과는 **메인 에이전트가** `{result_dir}/검토결과.md` 에 그대로 남깁니다. 리포트와 같은 폴더입니다.
 
 ### 판정별 처리
 
@@ -192,7 +202,9 @@ HTML 한 곳만 고치면 됩니다. (배포 후 수정은 Step 5의 3곳 동시
    ```
    - Notion 구조: `광고 리포트 에이전트 > {brand} > {report_title}`
    - 기존 동일 제목 페이지는 자동 아카이브
-   - **`--force-html` 없이 실행** → 수동 추가 섹션이 포함된 HTML 유지
+   - **`--force-html` 없이 실행** → 새로 만들지 않고 가장 최근 결과물 `{result_dir}/{html_filename}` (수동 섹션 포함)을 올림
+   - 노션 주소는 같은 폴더의 `{html_filename}.url` 에 남는다
+   - 다른 결과물 폴더를 올리려면 `--result-dir "결과물/…"` 을 붙인다
 
 2. Notion 페이지 상단(요약 callout 바로 뒤)에 HTML 다운로드 블록을 추가합니다:
    - Notion File Upload API로 HTML 파일 업로드: POST /v1/file_uploads → POST .../send (multipart)
@@ -211,7 +223,7 @@ HTML 한 곳만 고치면 됩니다. (배포 후 수정은 Step 5의 3곳 동시
 
 ```
 --- Step 4/6 완료: 배포 ---
-  HTML: output/{html_filename}
+  HTML: {result_dir}/{html_filename}
   Notion: {notion_url}
   HTML 다운로드: Notion 페이지 상단에서 가능
 ```
@@ -222,9 +234,10 @@ HTML 한 곳만 고치면 됩니다. (배포 후 수정은 Step 5의 3곳 동시
 
 ### 수정 요청 시 3곳 동시 수정 (필수)
 
-사용자가 리포트 내용 수정을 요청하면 반드시 아래 3곳을 한 번에 수정합니다:
+사용자가 리포트 내용 수정을 요청하면 반드시 아래 3곳을 한 번에 수정합니다.
+따로 지정이 없으면 대상은 **가장 최근 결과물 폴더**의 리포트입니다. 새 폴더를 만들지 않고 그 자리에서 고칩니다:
 
-1. **로컬 HTML** (`output/{html_filename}`), Edit 도구로 직접 수정
+1. **로컬 HTML** (`{result_dir}/{html_filename}`), Edit 도구로 그 자리에서 수정
 2. **Notion 페이지**, Notion API로 해당 블록 수정
    - 테이블 열 수 변경 시: 기존 테이블 삭제 → 새 테이블 생성
    - 텍스트 수정: PATCH /v1/blocks/{block_id}
@@ -282,14 +295,15 @@ HTML 한 곳만 고치면 됩니다. (배포 후 수정은 Step 5의 3곳 동시
 
 ### 채널로 보내기 (사람 승인 뒤)
 
-1. 먼저 보낼 내용을 보여 준다. 보내지 않는다:
+1. 먼저 보낼 내용을 보여 준다. 보내지 않는다. 가장 최근 결과물 폴더를 읽고, 요약을 그 폴더의 `메신저요약.txt` 로 남긴다:
    ```bash
-   python3 messenger.py --data-dir "{data_path}" --link "{notion_url}" --dry-run
+   python3 messenger.py --link "{notion_url}" --dry-run
    ```
+   다른 결과물 폴더면 `--result-dir "{result_dir}"` 를 붙인다. 노션 주소를 빼면 그 폴더의 `.url` 파일을 쓴다.
 2. **「이 내용으로 팀 채널에 보낼까요?」** 라고 묻고 멈춘다. 답을 받기 전에는 보내지 않는다.
 3. 승인하면 보낸다. 웹훅 주소는 `.env` 의 `SLACK_WEBHOOK_URL` 또는 `DISCORD_WEBHOOK_URL` 이다:
    ```bash
-   python3 messenger.py --data-dir "{data_path}" --link "{notion_url}"
+   python3 messenger.py --link "{notion_url}"
    ```
 4. `.env` 에 웹훅이 없으면 위 요약 형식을 복사용으로만 주고 끝낸다.
 
@@ -324,7 +338,9 @@ HTML 한 곳만 고치면 됩니다. (배포 후 수정은 Step 5의 3곳 동시
 - Notion 루트 페이지: `305d6f058339803f9795c65914019b06`
 - 에러 격리 원칙: Notion 실패해도 HTML은 항상 생성
 - 제품명: 전체 표시 (말줄임 금지)
-- HTML 보호: `--notion`만 실행 시 기존 HTML 덮어쓰지 않음 (`--force-html`로 강제 재생성)
+- 결과물 자리: `결과물/{date_code}_{HHMM}/` · 만들 때마다 새 폴더 · 덮어쓰지 않음
+- 가장 최근 결과물: `결과물/` 안 폴더 이름순 마지막. 노션 · 검토 · 수정 · 메신저는 따로 말이 없으면 여기를 쓴다
+- HTML 보호: `--notion`만 실행 시 새로 만들지 않고 가장 최근 결과물의 리포트를 올림 (`--force-html`을 붙이면 새 폴더에 새로 만들어 올림)
 - 수정 시 3곳 동시: HTML + Notion 페이지 + Notion 다운로드 파일 항상 함께 수정
 
 ---
@@ -402,7 +418,7 @@ pwd && ls generate_report.py
 스킬 없이도 Step 1은 직접 실행할 수 있습니다:
 
 ```bash
-python3 generate_report.py --data-dir "{data_path}" --brand "{brand}" --no-open
+python3 generate_report.py --data-dir "{data_path}" --brand "{brand}" --summary-only
 ```
 
 이후 Step 2~6은 이 문서를 참고해 수동으로 진행합니다.

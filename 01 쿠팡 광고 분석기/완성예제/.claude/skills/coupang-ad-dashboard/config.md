@@ -9,7 +9,7 @@ file_type: xlsx
 csv_encoding: utf-8-sig
 csv_delimiter: ','
 sheet_name: null
-output_directory: 결과물/쿠팡-광고-대시보드
+output_directory: 결과물
 date_start: null
 date_end: null
 attribution_days: 14

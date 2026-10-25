@@ -4,22 +4,27 @@
       "Bash(python3 generate_report.py:*)",
       "Bash(python3 messenger.py:*)",
       "Bash(ls:*)",
-      "Bash(open output/:*)",
+      "Bash(open 결과물/:*)",
       "Read(./리포트 자료/**)",
-      "Read(./output/**)"
+      "Read(./결과물/**)"
     ]
   },
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|Write",
         "hooks": [
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard_force_html.py\"",
             "timeout": 10,
-            "statusMessage": "수동 섹션 보호 확인 중"
-          },
+            "statusMessage": "사람이 손본 리포트 보호 확인 중"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard_exfil.py\"",

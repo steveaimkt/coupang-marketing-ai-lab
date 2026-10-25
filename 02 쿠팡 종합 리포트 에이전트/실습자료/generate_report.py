@@ -7,8 +7,14 @@ HTML 리포트 생성 + Notion 자동 업로드를 지원합니다.
 
 사용법:
     python generate_report.py                              # HTML 리포트만 생성
-    python generate_report.py --notion                     # HTML + Notion 업로드
+    python generate_report.py --notion                     # 가장 최근 결과물 리포트를 Notion 에 업로드
     python generate_report.py --data-dir "2월 데이터"       # 다른 데이터 폴더 지정
+    python generate_report.py --summary-only               # 숫자만 확인 (파일을 만들지 않는다)
+
+결과물 자리:
+    리포트를 만들 때마다 결과물/{자료 날짜}_{만든 시각 HHMM}/ 새 폴더에 넣는다.
+    같은 이름 폴더가 있으면 _2, _3 을 붙인다. 이미 있는 리포트는 절대 덮어쓰지 않는다.
+    가장 최근 결과물 = 결과물/ 안 폴더 이름순 마지막.
 
 초기 설정:
     .env 에 NOTION_API_KEY / NOTION_PAGE_ID 기입 (.env.example 참고)
@@ -127,6 +133,45 @@ def find_files_in_dir(data_dir: str) -> dict:
     return files
 
 
+RESULT_ROOT = "결과물"
+
+
+def result_root(output_dir: str = None) -> Path:
+    """결과물 뿌리 폴더. 상대 경로면 이 스크립트 폴더 기준."""
+    root = Path(output_dir or RESULT_ROOT)
+    if not root.is_absolute():
+        root = Path(os.path.dirname(os.path.abspath(__file__))) / root
+    return root
+
+
+def result_folders(root: Path) -> list:
+    """결과물/ 안의 리포트 폴더를 이름순으로. 파일(3회구동.md 등)은 뺀다."""
+    if not root.exists():
+        return []
+    return sorted([d for d in root.iterdir() if d.is_dir() and not d.name.startswith(".")], key=lambda d: d.name)
+
+
+def latest_result_dir(root: Path, filename: str = None):
+    """가장 최근 결과물 폴더 = 이름순 마지막.
+    filename 을 주면 그 리포트가 들어 있는 폴더 중 이름순 마지막."""
+    folders = result_folders(root)
+    if filename:
+        folders = [d for d in folders if (d / filename).exists()]
+    return folders[-1] if folders else None
+
+
+def new_result_dir(root: Path, date_code: str) -> Path:
+    """결과물/{자료 날짜}_{HHMM}/ 를 새로 만든다. 같은 이름이 있으면 _2, _3."""
+    from datetime import datetime
+    base = f"{date_code}_{datetime.now().strftime('%H%M')}"
+    cand, n = root / base, 2
+    while cand.exists():
+        cand = root / f"{base}_{n}"
+        n += 1
+    cand.mkdir(parents=True)
+    return cand
+
+
 def resolve_brand(brand_arg: str, data_dir: str) -> str:
     """브랜드명 결정: --brand 우선, 없으면 data-dir 경로에서 추출.
 
@@ -156,12 +201,14 @@ def main():
     # 파일 지정
     parser.add_argument("--data-dir", "-d", help="데이터 파일 디렉토리 (기본: '리포트 자료')", default=None)
     # 출력 설정
-    parser.add_argument("--output-dir", "-o", help="리포트 출력 디렉토리 (기본: 'output')", default="output")
+    parser.add_argument("--output-dir", "-o", help="결과물 뿌리 폴더 (기본: '결과물'). 만들 때마다 그 안에 {자료 날짜}_{HHMM}/ 새 폴더", default=RESULT_ROOT)
+    parser.add_argument("--result-dir", help="--notion 으로 올릴 결과물 폴더 (기본: 같은 리포트가 든 가장 최근 결과물 폴더)", default=None, dest="result_dir")
+    parser.add_argument("--summary-only", help="숫자만 확인하고 파일은 만들지 않는다", action="store_true", dest="summary_only")
     parser.add_argument("--no-open", help="브라우저 자동 열기 비활성화", action="store_true")
 
     # 연동 옵션
     parser.add_argument("--notion", help="Notion에 리포트 업로드", action="store_true")
-    parser.add_argument("--force-html", help="기존 HTML 파일이 있어도 강제 재생성", action="store_true", dest="force_html")
+    parser.add_argument("--force-html", help="--notion 과 함께 쓰면 가장 최근 리포트 대신 새 리포트를 새 폴더에 만들어 올린다", action="store_true", dest="force_html")
     parser.add_argument("--report-title", help="Notion 리포트 페이지 제목 (기본: '쿠팡 종합 리포트 - {월}')")
     parser.add_argument("--target-sales", type=int, help="월 목표 매출 (예: 70000000)", default=None)
     parser.add_argument("--next-target-sales", type=int, help="다음달 목표 매출 (예: 50000000). 지정 시 다음월 목표를 이 값으로 고정", default=None, dest="next_target_sales")
@@ -305,20 +352,24 @@ def main():
     step += 1
     print()
 
+    if args.summary_only:
+        print("  숫자만 확인했습니다 (--summary-only · 파일을 만들지 않았습니다)")
+        return None
+
     # ========== 4. HTML 리포트 생성 ==========
     print(f"[{step}/{total_steps}] HTML 리포트 생성 중...")
     try:
         html_content = generate_html_report(analysis)
 
-        script_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-        output_path = Path(args.output_dir)
-        if not output_path.is_absolute():
-            output_path = script_dir / output_path
-        output_path.mkdir(parents=True, exist_ok=True)
+        root = result_root(args.output_dir)
+
+        # 자료 날짜 = 읽은 데이터 날짜 폴더 이름 (없으면 판매 마지막 날)
+        date_code = Path(args.data_dir).parts[-1] if args.data_dir else None
+        if not date_code or date_code == "리포트 자료":
+            date_code = daily_df["날짜"].max().strftime("%Y-%m-%d")
 
         # 파일명: 브랜드_광고리포트_날짜.html (브랜드 없으면 기존 형식)
         if brand and args.data_dir:
-            date_code = Path(args.data_dir).parts[-1]
             if len(date_code) == 6 and date_code.isdigit():
                 date_display = f"20{date_code[:2]}.{date_code[2:4]}.{date_code[4:6]}"
             elif len(date_code) == 8 and date_code.isdigit():
@@ -329,15 +380,32 @@ def main():
         else:
             month_str = analysis["월"].replace("년 ", "_").replace("월", "")
             filename = f"쿠팡_종합리포트_{month_str}.html"
-        filepath = output_path / filename
 
-        # 기존 HTML이 있고 Notion 배포만 실행하는 경우 덮어쓰지 않음 (수동 추가 섹션 보호)
-        only_deploy = args.notion and not args.force_html
-        if filepath.exists() and only_deploy:
-            print(f"  기존 HTML 유지: {filepath}")
+        # Notion 배포만 실행하면 새로 만들지 않고 가장 최근 결과물의 리포트를 올린다 (사람이 손본 섹션 유지)
+        existing = None
+        if args.notion and not args.force_html:
+            if args.result_dir:
+                rd = Path(args.result_dir)
+                if not rd.is_absolute():
+                    rd = script_dir / rd
+                existing = rd if (rd / filename).exists() else None
+                if existing is None:
+                    print(f"  [오류] {rd} 에 {filename} 이 없습니다.")
+                    sys.exit(1)
+            else:
+                existing = latest_result_dir(root, filename)
+
+        if existing is not None:
+            result_dir = existing
+            filepath = result_dir / filename
+            print(f"  기존 리포트를 그대로 올립니다: {filepath}")
         else:
-            with open(filepath, "w", encoding="utf-8") as f:
+            # 만들 때마다 새 폴더. 이미 있는 리포트는 덮어쓰지 않는다.
+            result_dir = new_result_dir(root, date_code)
+            filepath = result_dir / filename
+            with open(filepath, "x", encoding="utf-8") as f:
                 f.write(html_content)
+            print(f"  결과물 폴더: {result_dir}")
             print(f"  HTML 리포트: {filepath}")
     except Exception as e:
         print(f"\n[오류] HTML 리포트 생성 실패: {e}")
@@ -383,6 +451,7 @@ def main():
     print("=" * 60)
     print("  리포트 생성 완료!")
     print("=" * 60)
+    print(f"  폴더:   {result_dir}")
     print(f"  HTML:   {filepath}")
     if notion_url:
         print(f"  Notion: {notion_url}")

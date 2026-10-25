@@ -1,10 +1,13 @@
-"""설정 파일을 읽어 원본 XLSX/CSV로 로컬 분석기를 재생성한다."""
+"""설정 파일을 읽어 원본 XLSX/CSV로 로컬 분석기를 만든다.
+
+만들 때마다 결과물/{자료 날짜}_{만든 시각 HHMM}/ 새 폴더에 넣는다. 지난 결과물은 덮어쓰지 않는다.
+자료 날짜는 읽은 데이터 날짜 폴더 이름(예 2026-10-20)이고, 시각은 이 컴퓨터의 현지 시각이다.
+같은 이름이 있으면 _2, _3 을 붙인다."""
 from pathlib import Path
 from datetime import datetime, date
 from decimal import Decimal, InvalidOperation
 import argparse
 import shutil
-from datetime import timezone
 import csv
 import hashlib
 import html
@@ -47,6 +50,21 @@ def resolve_input(root, spec):
         raise ValueError(f'{latest.name} 폴더에 매출 성장 광고 보고서가 {len(pick)}개 있습니다. 하나만 남기세요: ' + ', '.join(m.name for m in pick))
     return pick[0]
 
+
+def new_result_folder(base, source, last_day):
+    """결과물/{자료 날짜}_{HHMM}/ 를 새로 만든다. 같은 이름이 있으면 _2, _3 을 붙인다. 있는 폴더는 건드리지 않는다."""
+    day = source.parent.name if re.fullmatch(r'\d{4}-\d{2}-\d{2}', source.parent.name) else last_day
+    stem = f"{day}_{datetime.now().strftime('%H%M')}"
+    base.mkdir(parents=True, exist_ok=True)
+    n = 1
+    while True:
+        folder = base / (stem if n == 1 else f'{stem}_{n}')
+        try:
+            folder.mkdir()
+            return folder
+        except FileExistsError:
+            n += 1
+
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--config', type=Path, help='생성된 분석 스킬의 config.md')
 args = parser.parse_args()
@@ -64,9 +82,9 @@ else:
 CONFIG = yaml.safe_load(re.search(r'```yaml\n(.*?)```', (SKILL / 'config.md').read_text(), re.S)[1])
 CONFIG = apply_claude_md(ROOT, CONFIG)
 source = resolve_input(ROOT, CONFIG['input_file'])
-out = Path(CONFIG['output_directory'])
-if not out.is_absolute():
-    out = ROOT / out
+results = Path(CONFIG['output_directory'])
+if not results.is_absolute():
+    results = ROOT / results
 days = CONFIG['attribution_days']
 assert days in (1, 14)
 assert CONFIG['star_roas_pct'] >= CONFIG['potential_roas_pct'] >= 0
@@ -149,30 +167,23 @@ document = f'''<!doctype html>
 <div id="source-context" class="source-context"></div><div id="panel" role="tabpanel"></div>
 <footer><span id="footer-source"></span><span>광고 전환매출 기준 · 비율은 합계로 재계산</span></footer></main></div>
 <noscript>이 분석기는 JavaScript가 켜진 브라우저에서 열어 주세요.</noscript></body></html>'''
-out.mkdir(parents=True, exist_ok=True)
-# 기존 화면 수정은 보존한다. 새 출력 폴더에는 실행에 필요한 자산을 함께 제공한다.
+# 화면 자산은 분석 스킬 assets/dashboard 에서 가져온다. 화면을 고치려면 그쪽을 고친다.
 asset_dir = SKILL / 'assets/dashboard'
 if not asset_dir.is_dir():
     asset_dir = Path(__file__).resolve().parent
-for name in ('styles.css', 'script.js', 'build.py', 'verify.py', 'verify-browser.cjs'):
-    src = asset_dir / name
-    dest = out / name
-    if src.exists() and not dest.exists():
-        shutil.copy2(src, dest)
 for name in ('styles.css', 'script.js'):
-    if not (out / name).is_file():
-        raise FileNotFoundError(f'화면 자산 없음: {out / name}')
-report_path = out / '검증결과.md'
-if report_path.exists():
-    history = out / '검증기록'
-    history.mkdir(exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
-    shutil.copy2(report_path, history / f'{stamp}.md')
+    if not (asset_dir / name).is_file():
+        raise FileNotFoundError(f'화면 자산 없음: {asset_dir / name}')
+# 만들 때마다 새 폴더. 지난 결과물은 그대로 남는다.
+out = new_result_folder(results, source, meta['end'])
+for name in ('styles.css', 'script.js'):
+    shutil.copy2(asset_dir / name, out / name)
 (out / 'index.html').write_text(document, encoding='utf-8')
 assert before == hashlib.sha256(source.read_bytes()).hexdigest(), '원본 파일이 변경됨'
-report = f'''# 최신 생성 확인
+report = f'''# 생성 확인 · {out.name}
 
-- 원본: {source.name} / {origin_detail}
+- 결과물 폴더: {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out}/
+- 원본: {source.parent.name}/{source.name} / {origin_detail}
 - SHA-256: {before}
 - 원본 {len(original):,}행, {len(headers)}개 열 / 분석 {len(rows):,}행
 - 기간: {meta['start']}~{meta['end']} / 기간 밖 {outside}행 / 오류로 보류 {len(excluded)}행
@@ -181,11 +192,13 @@ report = f'''# 최신 생성 확인
 - 원본 수정 없음: 생성 전후 SHA-256 일치
 - 날짜·필수 열·유효 성과 값 확인 완료. 잘못된 행을 0으로 대체하지 않음.
 - 이번 실행의 원본 독립 대조·브라우저·반복 실행: 미확인. 실행한 검사만 이 문서에 추가한다.
-- 이전 기록은 검증기록/에 보존한다. 이전 통과를 이번 실행의 통과로 간주하지 않는다.
+- 지난 결과물은 결과물/ 안 다른 폴더에 그대로 있다. 지난 통과를 이번 실행의 통과로 보지 않는다.
 
 ## 보류 행
 
 {json.dumps(excluded, ensure_ascii=False) if excluded else '없음'}
 '''
 (out / '검증결과.md').write_text(report, encoding='utf-8')
-print(json.dumps(dict(output=str(out), totals=totals, meta=meta), ensure_ascii=False))
+shown = out.relative_to(ROOT) if out.is_relative_to(ROOT) else out
+print(f'{shown}/ 에 만들었습니다')
+print(json.dumps(dict(output=str(out), folder=out.name, totals=totals, meta=meta), ensure_ascii=False))

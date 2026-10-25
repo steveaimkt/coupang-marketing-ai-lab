@@ -2,7 +2,7 @@
 """PreToolUse(Bash): 내부 자료가 외부로 나가는 명령을 차단한다.
 
 CLAUDE.md 규칙 · "내부 자료: GitHub 등 외부 업로드 금지".
-보호 대상: .env (노션 키 · 웹훅), config.json, 리포트 자료/ (브랜드 원본 데이터), output/ (리포트 산출물).
+보호 대상: .env (노션 키 · 웹훅), config.json, 리포트 자료/ (브랜드 원본 데이터), 결과물/ (리포트 결과물), output/ (옛 산출물 자리).
 
 전송 동사 + 보호 대상이 같은 명령에 함께 있을 때만 차단한다.
 로컬 작업(ls, cp, python 실행 등)은 영향 없다.
@@ -28,7 +28,8 @@ SECRETS = [
     (".env", ".env (노션 키 · 웹훅 주소)"),
     ("config.json", "config.json (Notion API 키)"),
     ("리포트 자료", "리포트 자료/ (브랜드 원본 데이터)"),
-    ("output/", "output/ (리포트 산출물)"),
+    ("결과물", "결과물/ (리포트 결과물)"),
+    ("output/", "output/ (옛 산출물 자리)"),
     ("credentials.json", "credentials.json"),
     ("token.json", "token.json"),
 ]
@@ -63,7 +64,7 @@ def main():
     if verb in ("git push", "gh (GitHub CLI)"):
         deny(
             f"차단: '{verb}'. 이 저장소는 외부 업로드가 금지된 내부 자료입니다 (CLAUDE.md).\n"
-            f".env(노션 키 · 웹훅), 리포트 자료/, output/ 이 포함될 수 있습니다.\n"
+            f".env(노션 키 · 웹훅), 리포트 자료/, 결과물/ 이 포함될 수 있습니다.\n"
             f"정말 필요하면 사용자에게 직접 확인받으세요."
         )
 

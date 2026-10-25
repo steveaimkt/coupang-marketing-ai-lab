@@ -1,4 +1,7 @@
-"""원본을 별도로 읽어 HTML 내장 행과 Decimal 합계를 검산한다. 화면 검사는 별도이다."""
+"""원본을 별도로 읽어 HTML 내장 행과 Decimal 합계를 검산한다. 화면 검사는 별도이다.
+
+따로 지정이 없으면 가장 최근 결과물(결과물/ 안 폴더 이름순 마지막)을 맞춰 본다.
+지난 결과물은 --dir 2026-10-20_1405 처럼 폴더를 지정한다."""
 import argparse
 import csv
 from datetime import date, datetime
@@ -44,22 +47,68 @@ def resolve_input(root, spec):
         raise ValueError(f'{latest.name} 폴더에 매출 성장 광고 보고서가 {len(pick)}개 있습니다. 하나만 남기세요: ' + ', '.join(m.name for m in pick))
     return pick[0]
 
+
+RESULT_NAME = re.compile(r'^(\d{4}-\d{2}-\d{2}_\d{4})(?:_(\d+))?$')
+
+
+def result_folders(base):
+    """결과물/ 안의 {자료 날짜}_{HHMM}[_N] 폴더를 이름순으로 돌려준다. 배포용 같은 다른 폴더는 뺀다."""
+    if not Path(base).is_dir():
+        return []
+    found = [d for d in Path(base).iterdir() if d.is_dir() and RESULT_NAME.match(d.name)]
+    return sorted(found, key=lambda d: (RESULT_NAME.match(d.name)[1], int(RESULT_NAME.match(d.name)[2] or 1)))
+
+
+def latest_result(base):
+    """가장 최근 결과물 = 결과물/ 안 폴더 이름순 마지막."""
+    folders = result_folders(base)
+    if not folders:
+        raise FileNotFoundError(f'결과물이 아직 없습니다: {base} · 먼저 분석기를 만드세요.')
+    return folders[-1]
+
+
+def candidates(root, spec):
+    """input_file 규칙에 맞는 원본 후보 전부. 지난 결과물을 맞춰 볼 때 쓴다."""
+    if not any(ch in str(spec) for ch in '*?['):
+        p = Path(spec)
+        return [p if p.is_absolute() else root / p]
+    return [m for m in sorted(root.glob(str(spec))) if not m.name.startswith(('~$', '.'))]
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--config', type=Path, required=True)
+    p.add_argument('--dir', help='맞춰 볼 결과물 폴더. 비우면 가장 최근 결과물')
     args = p.parse_args()
     config_path = args.config.resolve()
     config = yaml.safe_load(re.search(r'```yaml\n(.*?)```', config_path.read_text(), re.S)[1])
     root = config_path.parents[3]
     config = apply_claude_md(root, config)
-    source = resolve_input(root, config['input_file'])
-    out = root / config['output_directory']
+    results = Path(config['output_directory'])
+    results = results if results.is_absolute() else root / results
+    if args.dir:
+        given = Path(args.dir)
+        out = next((d for d in (given, root / given, results / given) if (d / 'index.html').is_file()), None)
+        assert out is not None, f'결과물 폴더를 찾지 못했습니다: {args.dir}'
+    else:
+        out = latest_result(results)
+    out = out.resolve()
     html = (out / 'index.html').read_bytes()
     saved = json.loads(re.search(r'<script id="report-data" type="application/json">(.*?)</script>', html.decode(), re.S)[1])
-    sha = hashlib.sha256(source.read_bytes()).hexdigest()
-    assert sha == saved['meta']['sha256'], '생성 시점과 원본 파일이 다릅니다'
     expected_config = {k: v for k, v in config.items() if k not in ('input_file', 'output_directory')}
-    assert json.loads(json.dumps(expected_config, default=str)) == saved['config'], '설정과 화면이 일치하지 않습니다'
+    if args.dir:
+        # 지난 결과물은 만들 때 읽은 원본과 그때의 기준으로 맞춰 본다.
+        found = [m for m in candidates(root, config['input_file'])
+                 if m.is_file() and hashlib.sha256(m.read_bytes()).hexdigest() == saved['meta']['sha256']]
+        assert found, f"이 결과물을 만들 때 읽은 원본({saved['meta']['filename']})을 데이터/ 에서 찾지 못했습니다"
+        source = found[0]
+        config = {**config, **saved['config']}
+    else:
+        source = resolve_input(root, config['input_file'])
+        assert hashlib.sha256(source.read_bytes()).hexdigest() == saved['meta']['sha256'], \
+            f'가장 최근 결과물({out.name})이 지금 자료로 만든 것이 아닙니다. 다시 분석기를 만드세요'
+        assert json.loads(json.dumps(expected_config, default=str)) == saved['config'], '설정과 화면이 일치하지 않습니다'
+    sha = hashlib.sha256(source.read_bytes()).hexdigest()
     if source.suffix.lower() == '.xlsx':
         import openpyxl
         book = openpyxl.load_workbook(source, read_only=True, data_only=True)
@@ -136,11 +185,13 @@ def main():
     (out / '검산.json').write_text(json.dumps(evidence, ensure_ascii=False, default=lambda v: float(v) if isinstance(v, Decimal) else str(v)))
     with (out / '검증결과.md').open('a') as f:
         f.write('\n## 원본 독립 검산\n\n- 생성 코드의 파서·집계 함수를 가져오지 않고 원본을 다시 읽어 Decimal로 검산.\n'
+                f'- 원본: {source.parent.name}/{source.name}\n'
                 f'- 원본 SHA-256: {sha}\n- HTML SHA-256: {evidence["html_sha256"]}\n'
                 f'- 유효 {len(rows)}행의 필드·합계 일치. 보류 {len(excluded)}행, 기간 밖 {outside}행 대조 일치.\n'
                 '- 일별·캠페인·지면·키워드 합계와 원본 행 번호: 검산.json 참조.\n'
                 '- 브라우저 표시·상호작용: 이 검사만으로는 미확인.\n')
-    print(json.dumps({'matched': True, 'rows': len(rows), 'total': total}, ensure_ascii=False, default=str))
+    shown = out.relative_to(root) if out.is_relative_to(root) else out
+    print(json.dumps({'matched': True, 'dir': str(shown), 'rows': len(rows), 'total': total}, ensure_ascii=False, default=str))
 
 
 if __name__ == '__main__':
