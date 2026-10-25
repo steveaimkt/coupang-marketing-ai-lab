@@ -1,0 +1,15 @@
+# 쿠팡 종합 리포트 에이전트 의존성 (Python 3.9+)
+# 설치: python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+
+# 데이터 로딩·분석
+pandas==2.3.3
+numpy==2.0.2
+openpyxl==3.1.5          # .xlsx 읽기 (쿠팡 셀러 인사이트 원본)
+
+# 차트 (HTML 인터랙티브 + Notion 첨부용 PNG)
+plotly==6.6.0
+kaleido==1.2.0           # plotly 차트를 PNG로 렌더 → Notion 이미지 블록
+
+# 배포 채널
+notion-client==3.0.0     # Notion 페이지 생성
+requests==2.32.5         # Notion 파일 업로드(멀티파트)

@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 generate_report.py:*)",
+      "Bash(python3 messenger.py:*)",
+      "Bash(ls:*)",
+      "Bash(open output/:*)",
+      "Read(./리포트 자료/**)",
+      "Read(./output/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard_force_html.py\"",
+            "timeout": 10,
+            "statusMessage": "수동 섹션 보호 확인 중"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard_exfil.py\"",
+            "timeout": 10,
+            "statusMessage": "내부 자료 유출 검사 중"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/remind_three_places.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
